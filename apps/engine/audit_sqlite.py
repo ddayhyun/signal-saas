@@ -2,7 +2,7 @@
 import json
 import sqlite3
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS audit_conditions (
@@ -46,3 +46,23 @@ class AuditSQLite:
                 ),
             )
             conn.commit()
+
+    def get_last_state(self, symbol: str, timeframe: str, strategy: str) -> Optional[Tuple[str, float]]:
+        """
+        returns: (state, score) or None
+        """
+        with sqlite3.connect(self.path) as conn:
+            cur = conn.execute(
+                """
+                SELECT state, COALESCE(score, 0)
+                FROM audit_conditions
+                WHERE symbol=? AND timeframe=? AND strategy=?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (symbol, timeframe, strategy),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return (row[0], float(row[1]))
