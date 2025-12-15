@@ -1,6 +1,6 @@
 # apps/engine/condition.py
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List, Optional
 
 @dataclass
 class Thresholds:
@@ -20,26 +20,6 @@ class Weights:
     w60: float = 0.3
     w90: float = 0.2
 
-def window_score(m: Dict, th: Thresholds) -> Tuple[int, list]:
-    reasons = []
-    s = 0
-    if m["total_return"] > 0:
-        s += 1
-    else:
-        reasons.append("TotalReturn<=0")
-    if m["mdd"] < th.mdd_good:
-        s += 1
-    else:
-        reasons.append("MDD high")
-    if m["winrate"] > th.winrate_good:
-        s += 1
-    else:
-        reasons.append("WinRate low")
-    if m["consec_loss"] <= th.consec_loss_good:
-        s += 1
-    else:
-        reasons.append("ConsecLoss high")
-    return s, reasons
 
 def grade(score: float) -> str:
     if score >= 3.0:
@@ -48,50 +28,105 @@ def grade(score: float) -> str:
         return "YELLOW"
     return "RED"
 
-def downgrade(state: str) -> str:
-    return "YELLOW" if state == "GREEN" else ("RED" if state == "YELLOW" else "RED")
 
-def decide_condition(metrics_by_window: Dict[str, Dict], th: Thresholds = Thresholds(), w: Weights = Weights()):
+def downgrade(state: str) -> str:
+    if state == "GREEN":
+        return "YELLOW"
+    if state == "YELLOW":
+        return "RED"
+    return "RED"
+
+
+def window_score(m: Dict, th: Thresholds) -> Tuple[int, List[str]]:
+    """
+    0~4점. reasons에는 각 항목 pass/fail을 명시적으로 남긴다(설명 가능성 확보).
+    """
+    s = 0
+    reasons: List[str] = []
+
+    # TotalReturn
+    if m["total_return"] > 0:
+        s += 1
+        reasons.append("TotalReturn>0 (pass)")
+    else:
+        reasons.append("TotalReturn<=0 (fail)")
+
+    # MDD
+    if m["mdd"] < th.mdd_good:
+        s += 1
+        reasons.append(f"MDD<{th.mdd_good:.2f} (pass)")
+    else:
+        reasons.append(f"MDD>={th.mdd_good:.2f} (fail)")
+
+    # WinRate
+    if m["winrate"] > th.winrate_good:
+        s += 1
+        reasons.append(f"WinRate>{th.winrate_good:.2f} (pass)")
+    else:
+        reasons.append(f"WinRate<={th.winrate_good:.2f} (fail)")
+
+    # ConsecLoss
+    if m["consec_loss"] <= th.consec_loss_good:
+        s += 1
+        reasons.append(f"ConsecLoss<={th.consec_loss_good} (pass)")
+    else:
+        reasons.append(f"ConsecLoss>{th.consec_loss_good} (fail)")
+
+    return s, reasons
+
+
+def decide_condition(
+    metrics_by_window: Dict[str, Dict],
+    th: Thresholds = Thresholds(),
+    w: Weights = Weights(),
+) -> Tuple[str, float, List[str]]:
     """
     metrics_by_window: {"30d": {...}, "60d": {...}, "90d": {...}}
-    returns: state, score, reasons(list)
+
+    반환:
+      - state: GREEN/YELLOW/RED
+      - score: float (항상 계산됨)
+      - reasons: list[str] (항상 설명 포함)
     """
-    reasons = []
-    # 표본 부족 게이트(30d 기준)
+    reasons: List[str] = []
+
+    # 1) 윈도우별 점수 계산(항상)
+    s30, r30 = window_score(metrics_by_window["30d"], th)
+    s60, r60 = window_score(metrics_by_window["60d"], th)
+    s90, r90 = window_score(metrics_by_window["90d"], th)
+
+    score = w.w30 * s30 + w.w60 * s60 + w.w90 * s90
+
+    reasons.append(f"[30d] score={s30}/4, trades={metrics_by_window['30d']['trade_count']}")
+    reasons.extend([f"[30d] {x}" for x in r30])
+
+    reasons.append(f"[60d] score={s60}/4, trades={metrics_by_window['60d']['trade_count']}")
+    reasons.extend([f"[60d] {x}" for x in r60])
+
+    reasons.append(f"[90d] score={s90}/4, trades={metrics_by_window['90d']['trade_count']}")
+    reasons.extend([f"[90d] {x}" for x in r90])
+
+    # 2) 기본 상태(점수 기반)
+    base_state = grade(score)
+
+    # 3) 표본 부족 게이트(상태만 YELLOW로 제한, score/reasons는 유지)
     if metrics_by_window["30d"]["trade_count"] < th.min_trades:
-        reasons.append("Insufficient trades (<10) in 30d")
+        reasons.append(f"Gate: Insufficient trades in 30d (<{th.min_trades}) -> force YELLOW")
         base_state = "YELLOW"
-    else:
-        s30, r30 = window_score(metrics_by_window["30d"], th)
-        s60, r60 = window_score(metrics_by_window["60d"], th)
-        s90, r90 = window_score(metrics_by_window["90d"], th)
 
-        score = w.w30 * s30 + w.w60 * s60 + w.w90 * s90
-        base_state = grade(score)
-        reasons.extend([f"30d:{x}" for x in r30] + [f"60d:{x}" for x in r60] + [f"90d:{x}" for x in r90])
-
-    # 점수 없을 수 있어 계산 안전 처리
-    score_val = None
-    if base_state != "YELLOW" or "Insufficient trades" not in " ".join(reasons):
-        # 위에서 score 계산한 경우만
-        try:
-            score_val = w.w30 * window_score(metrics_by_window["30d"], th)[0] + \
-                        w.w60 * window_score(metrics_by_window["60d"], th)[0] + \
-                        w.w90 * window_score(metrics_by_window["90d"], th)[0]
-        except Exception:
-            score_val = None
-
-    # 오버라이드 강등(30d 기준)
+    # 4) 오버라이드 강등(30d 기준)
     m30 = metrics_by_window["30d"]
-    override_hits = []
+    override_hits: List[str] = []
+
     if m30["mdd"] >= th.mdd_override:
-        override_hits.append(f"MDD_30d>={th.mdd_override}")
+        override_hits.append(f"MDD_30d>={th.mdd_override:.2f}")
     if m30["consec_loss"] >= th.consec_loss_override:
         override_hits.append(f"ConsecLoss_30d>={th.consec_loss_override}")
 
     final_state = base_state
     if override_hits:
         final_state = downgrade(final_state)
-        reasons.append("Override: " + ", ".join(override_hits))
+        reasons.append("Override downgrade: " + ", ".join(override_hits))
 
-    return final_state, score_val, reasons
+    reasons.append(f"Decision: state={final_state}, score={score:.2f} (base={base_state})")
+    return final_state, float(score), reasons
