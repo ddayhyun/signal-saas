@@ -44,3 +44,27 @@ SCORE: 3.0
 METRICS: {'30d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '60d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '90d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}}
 REASONS: ['[30d] score=3/4, trades=13', '[30d] TotalReturn<=0 (fail)', '[30d] MDD<0.10 (pass)', '[30d] WinRate>0.45 (pass)', '[30d] ConsecLoss<=3 (pass)', '[60d] score=3/4, trades=13', '[60d] TotalReturn<=0 (fail)', '[60d] MDD<0.10 (pass)'] ...
 Audit saved to audit.db
+STATE: GREEN
+SCORE: 3.0
+METRICS: {'30d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '60d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '90d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}}
+REASONS: ['[30d] score=3/4, trades=13', '[30d] TotalReturn<=0 (fail)', '[30d] MDD<0.10 (pass)', '[30d] WinRate>0.45 (pass)', '[30d] ConsecLoss<=3 (pass)', '[60d] score=3/4, trades=13', '[60d] TotalReturn<=0 (fail)', '[60d] MDD<0.10 (pass)'] ...
+Audit saved to audit.db
+No telegram (state unchanged, heartbeat not due).
+STATE: GREEN
+SCORE: 3.0
+METRICS: {'30d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '60d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '90d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}}
+REASONS: ['[30d] score=3/4, trades=13', '[30d] TotalReturn<=0 (fail)', '[30d] MDD<0.10 (pass)', '[30d] WinRate>0.45 (pass)', '[30d] ConsecLoss<=3 (pass)', '[60d] score=3/4, trades=13', '[60d] TotalReturn<=0 (fail)', '[60d] MDD<0.10 (pass)'] ...
+Audit saved to audit.db
+No telegram (state unchanged, heartbeat not due).
+STATE: GREEN
+SCORE: 3.0
+METRICS: {'30d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '60d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '90d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}}
+REASONS: ['[30d] score=3/4, trades=13', '[30d] TotalReturn<=0 (fail)', '[30d] MDD<0.10 (pass)', '[30d] WinRate>0.45 (pass)', '[30d] ConsecLoss<=3 (pass)', '[60d] score=3/4, trades=13', '[60d] TotalReturn<=0 (fail)', '[60d] MDD<0.10 (pass)'] ...
+Audit saved to audit.db
+No telegram (state unchanged, heartbeat not due).
+STATE: GREEN
+SCORE: 3.0
+METRICS: {'30d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '60d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}, '90d': {'total_return': -0.027887915267608365, 'winrate': 0.6153846153846154, 'mdd': 0.06151054231366681, 'consec_loss': 3, 'trade_count': 13}}
+REASONS: ['[30d] score=3/4, trades=13', '[30d] TotalReturn<=0 (fail)', '[30d] MDD<0.10 (pass)', '[30d] WinRate>0.45 (pass)', '[30d] ConsecLoss<=3 (pass)', '[60d] score=3/4, trades=13', '[60d] TotalReturn<=0 (fail)', '[60d] MDD<0.10 (pass)'] ...
+Audit saved to audit.db
+No telegram (state unchanged, heartbeat not due).

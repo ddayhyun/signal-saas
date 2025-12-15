@@ -17,27 +17,31 @@ from .metrics import (
 from .condition import decide_condition
 from .audit_sqlite import AuditSQLite
 from .notifier_telegram import send_telegram
+from .emergency_predict import compute_emergency_risk
 
 
 def load_config() -> dict:
-    """
-    실행 위치가 어디든 config.yaml을 찾도록:
-    - 프로젝트 루트(권장): ./config.yaml
-    - 없으면 현재 작업 디렉토리의 config.yaml
-    """
     candidates = [
-        Path(__file__).resolve().parents[2] / "config.yaml",  # D:\IT\signal-saas\config.yaml
+        Path(__file__).resolve().parents[2] / "config.yaml",
         Path.cwd() / "config.yaml",
     ]
     for p in candidates:
         if p.exists():
             with p.open("r", encoding="utf-8") as f:
                 return yaml.safe_load(f)
-    raise FileNotFoundError("config.yaml not found. Put it in project root (e.g., D:\\IT\\signal-saas\\config.yaml).")
+    raise FileNotFoundError("config.yaml not found (put it in project root).")
+
+
+def _meta_to_ts(v: str | None) -> float | None:
+    if not v:
+        return None
+    try:
+        return float(str(v).strip())
+    except ValueError:
+        return None
 
 
 def human_message(state: str, metrics_by_window: dict, symbol: str) -> str:
-    # 심볼을 사람이 읽기 쉽게 (필요 시 확장 가능)
     name_map = {"BTC/USDT": "비트코인(BTC)"}
     asset_name = name_map.get(symbol, symbol)
 
@@ -108,17 +112,6 @@ def compute_window_metrics(df_window: pd.DataFrame, sim_cfg: SimConfig) -> dict:
     }
 
 
-def _meta_to_ts(v: str | None) -> float | None:
-    if not v:
-        return None
-    v = str(v).strip()
-    # epoch 문자열
-    try:
-        return float(v)
-    except ValueError:
-        return None
-
-
 def main():
     cfg = load_config()
 
@@ -171,8 +164,51 @@ def main():
     )
     print("Audit saved to audit.db")
 
-    # Heartbeat(12h) - epoch 비교
     now_ts = time.time()
+
+    # =========================
+    # ✅ 급변 가능성(예측형) 긴급 알림
+    # =========================
+    em = cfg.get("alerts", {}).get("emergency_predict", {})
+    if em.get("enabled", False):
+        cooldown_min = int(em.get("cooldown_minutes", 30))
+        thr = int(em.get("score_threshold", 75))
+
+        risk = compute_emergency_risk(df, em)
+        risk_score = int(risk.get("score", 0))
+
+        last_em_ts = _meta_to_ts(audit.get_meta("last_emergency_predict_ts"))
+        cooldown_ok = (last_em_ts is None) or ((now_ts - last_em_ts) >= cooldown_min * 60)
+
+        if risk_score >= thr and cooldown_ok:
+            hint = risk.get("direction_hint", "UNKNOWN")
+            hint_kr = {
+                "UP": "상승 쪽(추측입니다)",
+                "DOWN": "하락 쪽(추측입니다)",
+                "UNKNOWN": "방향 불명(추측입니다)",
+            }.get(hint, "방향 불명(추측입니다)")
+
+            sig = risk.get("signals", {})
+            msg = (
+                "🚨 급변 가능성 감지(주의)\n\n"
+                f"- 대상: {symbol}\n"
+                f"- 위험 점수: {risk_score}/100 (기준 {thr})\n"
+                f"- 방향 힌트: {hint_kr}\n\n"
+                "근거 체크:\n"
+                f"- 변동성 수축(스퀴즈): {'O' if sig.get('squeeze') else 'X'}\n"
+                f"- 변동성 팽창 시작: {'O' if sig.get('bw_expand') else 'X'}\n"
+                f"- ATR 팽창: {'O' if sig.get('atr_expand') else 'X'}\n"
+                f"- 거래량 급증: {'O' if sig.get('vol_spike') else 'X'}\n\n"
+                "👉 큰 움직임이 나올 가능성이 커진 구간입니다. 무리한 진입은 피하세요.\n"
+                "(매수/매도 신호는 제공하지 않습니다)"
+            )
+            send_telegram(msg)
+            audit.set_meta("last_emergency_predict_ts", str(now_ts))
+            print("Telegram notified (emergency_predict).")
+
+    # =========================
+    # ✅ 상태 변화 알림 + 12시간 요약(Heartbeat)
+    # =========================
     last_hb_ts = _meta_to_ts(audit.get_meta("last_heartbeat_ts"))
 
     state_changed = (last_state != state)
