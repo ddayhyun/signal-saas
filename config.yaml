@@ -1,0 +1,18 @@
+app:
+  heartbeat_hours: 12
+
+market:
+  symbol: "BTC/USDT"
+  timeframe: "15m"
+  limit: 10000
+
+strategy:
+  name: "MA20/50 + RSI14"
+  fast_ma: 20
+  slow_ma: 50
+  rsi_period: 14
+
+risk:
+  stop_loss: 0.02
+  take_profit: 0.04
+  fee_roundtrip: 0.002
