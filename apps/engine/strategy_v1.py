@@ -10,7 +10,7 @@ def apply_indicators(df: pd.DataFrame, fast: int = 20, slow: int = 50, rsi_perio
     return out
 
 def entry_condition(row) -> bool:
-    return (row["sma_fast"] > row["sma_slow"]) and (row["rsi"] < 30)
+    return (row["sma_fast"] > row["sma_slow"]) and (row["rsi"] < 40)
 
 def exit_condition(row) -> bool:
-    return (row["rsi"] > 70)
+    return (row["rsi"] > 60)
