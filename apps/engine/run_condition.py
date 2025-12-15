@@ -1,5 +1,7 @@
-
 import time
+from pathlib import Path
+
+import yaml
 import pandas as pd
 
 from .datafeed import fetch_ohlcv_binance
@@ -17,16 +19,37 @@ from .audit_sqlite import AuditSQLite
 from .notifier_telegram import send_telegram
 
 
-def human_message(state: str, metrics_by_window: dict) -> str:
+def load_config() -> dict:
+    """
+    실행 위치가 어디든 config.yaml을 찾도록:
+    - 프로젝트 루트(권장): ./config.yaml
+    - 없으면 현재 작업 디렉토리의 config.yaml
+    """
+    candidates = [
+        Path(__file__).resolve().parents[2] / "config.yaml",  # D:\IT\signal-saas\config.yaml
+        Path.cwd() / "config.yaml",
+    ]
+    for p in candidates:
+        if p.exists():
+            with p.open("r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+    raise FileNotFoundError("config.yaml not found. Put it in project root (e.g., D:\\IT\\signal-saas\\config.yaml).")
+
+
+def human_message(state: str, metrics_by_window: dict, symbol: str) -> str:
+    # 심볼을 사람이 읽기 쉽게 (필요 시 확장 가능)
+    name_map = {"BTC/USDT": "비트코인(BTC)"}
+    asset_name = name_map.get(symbol, symbol)
+
     m = metrics_by_window["30d"]
     trade_cnt = m["trade_count"]
-    winrate = int(m["winrate"] * 100) if m["winrate"] == m["winrate"] else 0  # NaN 방어
+    winrate = int(m["winrate"] * 100) if m["winrate"] == m["winrate"] else 0
     mdd = int(m["mdd"] * 100) if m["mdd"] == m["mdd"] else 0
 
     if state == "GREEN":
         return f"""📈 트레이드가드 시장 상태 알림
 
-현재 비트코인 시장 상태는
+현재 {asset_name} 시장 상태는
 🟢 안정적인 편입니다.
 
 ✔ 최근 30일 기준
@@ -45,7 +68,7 @@ def human_message(state: str, metrics_by_window: dict) -> str:
     if state == "YELLOW":
         return f"""⚠️ 트레이드가드 시장 상태 알림
 
-현재 비트코인 시장은
+현재 {asset_name} 시장은
 🟡 애매한 상태입니다.
 
 ✔ 최근 거래는 있었지만
@@ -56,7 +79,7 @@ def human_message(state: str, metrics_by_window: dict) -> str:
 
     return f"""🚨 트레이드가드 시장 상태 알림
 
-현재 비트코인 시장은
+현재 {asset_name} 시장은
 🔴 위험한 상태입니다.
 
 ❗ 최근 손실 위험이 커졌습니다.
@@ -72,8 +95,8 @@ def slice_last_days(df: pd.DataFrame, days: int) -> pd.DataFrame:
     return df[df["timestamp"] >= start].copy()
 
 
-def compute_window_metrics(df_window: pd.DataFrame) -> dict:
-    res = simulate_spot(df_window, SimConfig(fee_roundtrip=0.002, stop_loss=0.02, take_profit=0.04))
+def compute_window_metrics(df_window: pd.DataFrame, sim_cfg: SimConfig) -> dict:
+    res = simulate_spot(df_window, sim_cfg)
     trades = res["trades"]
     equity = res["equity"]
     return {
@@ -86,23 +109,10 @@ def compute_window_metrics(df_window: pd.DataFrame) -> dict:
 
 
 def _meta_to_ts(v: str | None) -> float | None:
-    """
-    notify_meta.value를 epoch(문자열)로 저장하는 걸 기본으로 하고,
-    혹시 과거에 ISO 문자열이 들어가 있어도 호환 처리.
-    """
     if not v:
         return None
     v = str(v).strip()
-
-    # ISO 형식 호환(예: 2025-12-16T10:00:00+00:00)
-    if "T" in v:
-        from datetime import datetime, timezone
-        dt = datetime.fromisoformat(v)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.timestamp()
-
-    # epoch 문자열(예: "1734321234.123")
+    # epoch 문자열
     try:
         return float(v)
     except ValueError:
@@ -110,16 +120,31 @@ def _meta_to_ts(v: str | None) -> float | None:
 
 
 def main():
-    symbol = "BTC/USDT"
-    timeframe = "15m"
-    strategy_name = "MA20/50 + RSI14"
+    cfg = load_config()
 
-    df = fetch_ohlcv_binance(symbol=symbol, timeframe=timeframe, limit=10000)
-    df = apply_indicators(df, fast=20, slow=50, rsi_period=14)
+    symbol = cfg["market"]["symbol"]
+    timeframe = cfg["market"]["timeframe"]
+    limit = int(cfg["market"]["limit"])
 
-    m30 = compute_window_metrics(slice_last_days(df, 30))
-    m60 = compute_window_metrics(slice_last_days(df, 60))
-    m90 = compute_window_metrics(slice_last_days(df, 90))
+    strategy_name = cfg["strategy"]["name"]
+    fast_ma = int(cfg["strategy"]["fast_ma"])
+    slow_ma = int(cfg["strategy"]["slow_ma"])
+    rsi_period = int(cfg["strategy"]["rsi_period"])
+
+    hb_hours = int(cfg["app"]["heartbeat_hours"])
+
+    sim_cfg = SimConfig(
+        fee_roundtrip=float(cfg["risk"]["fee_roundtrip"]),
+        stop_loss=float(cfg["risk"]["stop_loss"]),
+        take_profit=float(cfg["risk"]["take_profit"]),
+    )
+
+    df = fetch_ohlcv_binance(symbol=symbol, timeframe=timeframe, limit=limit)
+    df = apply_indicators(df, fast=fast_ma, slow=slow_ma, rsi_period=rsi_period)
+
+    m30 = compute_window_metrics(slice_last_days(df, 30), sim_cfg)
+    m60 = compute_window_metrics(slice_last_days(df, 60), sim_cfg)
+    m90 = compute_window_metrics(slice_last_days(df, 90), sim_cfg)
 
     metrics_by_window = {"30d": m30, "60d": m60, "90d": m90}
     state, score, reasons = decide_condition(metrics_by_window)
@@ -146,27 +171,24 @@ def main():
     )
     print("Audit saved to audit.db")
 
-    # 12시간 요약 알림(Heartbeat) - timezone 이슈 방지용 epoch 비교
-    HEARTBEAT_HOURS = 12
+    # Heartbeat(12h) - epoch 비교
     now_ts = time.time()
-
-    last_hb_raw = audit.get_meta("last_heartbeat_ts")  # 문자열
-    last_hb_ts = _meta_to_ts(last_hb_raw)
+    last_hb_ts = _meta_to_ts(audit.get_meta("last_heartbeat_ts"))
 
     state_changed = (last_state != state)
-    should_heartbeat = (last_hb_ts is None) or ((now_ts - last_hb_ts) >= HEARTBEAT_HOURS * 3600)
+    should_heartbeat = (last_hb_ts is None) or ((now_ts - last_hb_ts) >= hb_hours * 3600)
 
     if state_changed:
-        msg = human_message(state, metrics_by_window)
+        msg = human_message(state, metrics_by_window, symbol)
         send_telegram(msg)
         audit.set_meta("last_heartbeat_ts", str(now_ts))
         print("Telegram notified (state changed).")
 
     elif should_heartbeat:
-        msg = "⏰ 12시간 요약 알림\n\n" + human_message(state, metrics_by_window)
+        msg = "⏰ 요약 알림\n\n" + human_message(state, metrics_by_window, symbol)
         send_telegram(msg)
         audit.set_meta("last_heartbeat_ts", str(now_ts))
-        print("Telegram notified (12h heartbeat).")
+        print("Telegram notified (heartbeat).")
 
     else:
         print("No telegram (state unchanged, heartbeat not due).")
